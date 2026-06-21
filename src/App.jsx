@@ -1216,12 +1216,163 @@ function Result({ typeKey, answers, userName, onShare }) {
 
 // ─── SHARE ─────────────────────────────────────────────────────────────────
 
+// ─── SHARE IMAGE ───────────────────────────────────────────────────────────
+// Off-screen portrait card (600×900) captured by html2canvas and shared as PNG
+
+function ShareImage({ typeKey, answers, userName, publicUrl, innerRef }) {
+  const type = TYPES[typeKey];
+  const url = (publicUrl || "english-fingerprint.vercel.app").replace("https://", "");
+  const displayName = userName ? userName.toUpperCase() : null;
+
+  return (
+    <div
+      ref={innerRef}
+      style={{
+        position: "fixed",
+        left: "-9999px",
+        top: "-9999px",
+        width: "600px",
+        height: "900px",
+        background: "#0c0c0f",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "56px 52px 48px",
+        fontFamily: "'Inter', 'SF Pro Display', 'Helvetica Neue', sans-serif",
+        boxSizing: "border-box",
+        overflow: "hidden",
+      }}
+    >
+      {/* Subtle glow behind fingerprint */}
+      <div style={{
+        position: "absolute",
+        width: "480px",
+        height: "480px",
+        borderRadius: "50%",
+        background: `radial-gradient(circle, ${type.color}18 0%, transparent 65%)`,
+        top: "50%",
+        left: "50%",
+        transform: "translate(-50%, -55%)",
+        pointerEvents: "none",
+      }} />
+
+      {/* Top row */}
+      <div style={{
+        width: "100%",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        position: "relative",
+        zIndex: 1,
+      }}>
+        <span style={{ fontSize: "13px", letterSpacing: "0.2em", color: "rgba(255,255,255,0.3)", fontFamily: "monospace" }}>
+          ENGLISH FINGERPRINT
+        </span>
+        <span style={{ fontSize: "13px", letterSpacing: "0.12em", color: type.color, fontFamily: "monospace" }}>
+          #{String(hashAnswers(answers)).padStart(6, "0")}
+        </span>
+      </div>
+
+      {/* Center — fingerprint + type */}
+      <div style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: "28px",
+        position: "relative",
+        zIndex: 1,
+        flex: 1,
+        justifyContent: "center",
+      }}>
+        <Fingerprint answers={answers} color={type.color} size={240} />
+
+        <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: "10px" }}>
+          {displayName && (
+            <div style={{ fontSize: "14px", letterSpacing: "0.22em", color: "rgba(255,255,255,0.35)", fontFamily: "monospace" }}>
+              {displayName}
+            </div>
+          )}
+          <h1 style={{
+            fontSize: "46px",
+            fontWeight: 700,
+            color: type.color,
+            letterSpacing: "0.06em",
+            lineHeight: 1,
+            margin: 0,
+          }}>
+            {type.name}
+          </h1>
+          <p style={{
+            fontSize: "16px",
+            letterSpacing: "0.14em",
+            color: "rgba(255,255,255,0.45)",
+            margin: 0,
+            fontFamily: "monospace",
+          }}>
+            {type.tagline}
+          </p>
+        </div>
+
+        {/* Rarity pill */}
+        <div style={{
+          border: `1px solid ${type.color}44`,
+          padding: "8px 22px",
+          fontSize: "13px",
+          letterSpacing: "0.12em",
+          color: "rgba(255,255,255,0.4)",
+          fontFamily: "monospace",
+        }}>
+          <span style={{ color: type.color, fontWeight: 700 }}>{type.rarity}%</span>
+          {" "}of English speakers
+        </div>
+
+        {/* Provocation */}
+        <p style={{
+          fontSize: "18px",
+          fontWeight: 600,
+          color: "rgba(255,255,255,0.75)",
+          textAlign: "center",
+          lineHeight: 1.5,
+          maxWidth: "440px",
+          margin: 0,
+          letterSpacing: "-0.01em",
+        }}>
+          "{type.provocation}"
+        </p>
+      </div>
+
+      {/* Bottom — URL */}
+      <div style={{
+        width: "100%",
+        borderTop: "1px solid rgba(255,255,255,0.08)",
+        paddingTop: "20px",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        position: "relative",
+        zIndex: 1,
+      }}>
+        <span style={{ fontSize: "13px", letterSpacing: "0.1em", color: "rgba(255,255,255,0.2)", fontFamily: "monospace" }}>
+          {url}
+        </span>
+        <span style={{ fontSize: "13px", letterSpacing: "0.1em", color: "rgba(255,255,255,0.2)", fontFamily: "monospace" }}>
+          WHAT'S YOUR TYPE?
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── SHARE ─────────────────────────────────────────────────────────────────
+
 function Share({ typeKey, answers, userName, publicUrl, onRetake }) {
   const type = TYPES[typeKey];
   const [urlCopied, setUrlCopied] = useState(false);
   const [textCopied, setTextCopied] = useState(false);
   const [sharing, setSharing] = useState(false);
   const cardRef = useRef(null);
+  const shareImageRef = useRef(null);
   const canNativeShare = typeof navigator !== "undefined" && !!navigator.share;
 
   const siteUrl = publicUrl || "https://english-fingerprint.vercel.app";
@@ -1246,14 +1397,16 @@ function Share({ typeKey, answers, userName, publicUrl, onRetake }) {
   const nativeShare = async () => {
     setSharing(true);
     try {
-      // Capture the card as an image
+      // Capture the full off-screen share image (600×900 portrait)
       let imageFile = null;
-      if (cardRef.current) {
-        const canvas = await html2canvas(cardRef.current, {
+      if (shareImageRef.current) {
+        const canvas = await html2canvas(shareImageRef.current, {
           backgroundColor: "#0c0c0f",
           scale: 2,
           useCORS: true,
           logging: false,
+          width: 600,
+          height: 900,
         });
         const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
         imageFile = new File([blob], "english-fingerprint.png", { type: "image/png" });
@@ -1261,18 +1414,17 @@ function Share({ typeKey, answers, userName, publicUrl, onRetake }) {
 
       const shareData = {
         title: `I got ${type.name} on the English Fingerprint Test`,
-        text: shareText,
+        text: `${type.provocation}\n\nOnly ${type.rarity}% of people get this type.\n\n→ ${siteUrl}`,
         url: siteUrl,
       };
 
-      // Share with image if browser supports it, fall back to text-only
       if (imageFile && navigator.canShare?.({ files: [imageFile] })) {
         await navigator.share({ ...shareData, files: [imageFile] });
       } else {
         await navigator.share(shareData);
       }
     } catch (e) {
-      // User cancelled or browser blocked — silently ignore
+      // User cancelled or unsupported — silently ignore
     } finally {
       setSharing(false);
     }
@@ -1281,6 +1433,15 @@ function Share({ typeKey, answers, userName, publicUrl, onRetake }) {
   return (
     <div style={styles.screen}>
       <div className="noise-overlay" />
+
+      {/* Off-screen share image — captured by html2canvas */}
+      <ShareImage
+        typeKey={typeKey}
+        answers={answers}
+        userName={userName}
+        publicUrl={publicUrl}
+        innerRef={shareImageRef}
+      />
       <div style={styles.shareInner}>
 
         {/* Provocation — the viral hook */}
@@ -1291,8 +1452,8 @@ function Share({ typeKey, answers, userName, publicUrl, onRetake }) {
           </p>
         </div>
 
-        {/* The shareable card */}
-        <div ref={cardRef} style={{ ...styles.shareCard, borderColor: type.color + "40" }} className="slide-up">
+        {/* The shareable card — preview of what gets shared */}
+        <div style={{ ...styles.shareCard, borderColor: type.color + "40" }} className="slide-up">
           <div style={styles.cardTopRow} className="mono">
             <span style={{ color: "var(--text-muted)" }}>ENGLISH FINGERPRINT</span>
             <span style={{ color: type.color }}>#{String(hashAnswers(answers)).padStart(6, "0")}</span>
