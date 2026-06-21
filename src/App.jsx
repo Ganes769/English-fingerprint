@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import "./index.css";
+import { saveResult, loadResult } from "./lib/supabase.js";
+import html2canvas from "html2canvas";
 
 // ─── QUESTIONS ─────────────────────────────────────────────────────────────
 
@@ -534,6 +536,8 @@ const TYPES = {
     brief: "Cuts every unnecessary word. Your emails are 3 lines.",
     description:
       "You are precise. You care about every word earning its place — and cutting the ones that don't. You edit texts before sending. You delete adjectives on sight. Waste bothers you more than silence ever could. People call your writing cold. You call it clean.",
+    provocation: "Most people think they edit like a Surgeon. Most of them are wrong.",
+    challenge: "Tag a Poet. They think your writing is cold. You think theirs is noise. Someone's right.",
     color: "#4a9eff",
     rarity: 18,
     shareHook:
@@ -546,6 +550,8 @@ const TYPES = {
     brief: "Picks words for how they sound and land, not just what they mean.",
     description:
       "You are rhythmic. You care about how words land, not just what they mean. You read sentences aloud in your head. You choose words for texture and weight. People say you over-communicate. You're just being precise in a different language.",
+    provocation: "You notice things in language that other people walk straight past.",
+    challenge: "Find a Surgeon in your life. Show them this result. Watch them disagree with every word.",
     color: "#b56cff",
     rarity: 14,
     shareHook:
@@ -558,6 +564,8 @@ const TYPES = {
     brief: "Gets to the point. Every time. Style is someone else's problem.",
     description:
       "You are direct. You care about getting information from A to B — nothing more. You've sent one-word emails. Subject lines matter more to you than bodies. Style is someone else's problem. Clarity is yours.",
+    provocation: "You have definitely sent a one-word email. And you don't regret it.",
+    challenge: "Tag someone who writes three paragraphs when a sentence will do. They are not an Operator.",
     color: "#00e5a0",
     rarity: 31,
     shareHook:
@@ -570,6 +578,8 @@ const TYPES = {
     brief: "Knows every grammar rule. Breaks them on purpose, for effect.",
     description:
       "You are deliberate. You care about effect, not correctness. You know every rule — you just prefer breaking them with intention. You split infinitives for emphasis. You weaponize the comma splice. Grammar is a tool, not a law.",
+    provocation: "You know exactly which rule you just broke. That's what makes it different from a mistake.",
+    challenge: "Send this to a Guardian. The reaction will be immediate. And completely predictable.",
     color: "#ff6b35",
     rarity: 22,
     shareHook:
@@ -582,6 +592,8 @@ const TYPES = {
     brief: "Spots the apostrophe error on the menu. Every time.",
     description:
       "You are exact. You care about standards — because without them, meaning erodes. You spot apostrophe errors on restaurant menus. You believe correct and clear are the same thing. You're not pedantic. You're protecting something worth protecting.",
+    provocation: "You spotted the error in that last sentence before you understood what it meant.",
+    challenge: "Know a Provocateur? Show them this. They'll break a rule on purpose just to annoy you.",
     color: "#ffd700",
     rarity: 11,
     shareHook:
@@ -594,6 +606,8 @@ const TYPES = {
     brief: "Doesn't fit any known profile. Rarest type in the test.",
     description:
       "You are unclassifiable. You care about things language hasn't named yet. Your pattern doesn't map to any known profile. Fewer than 4% of people read this — which means you're either genuinely rare, or you picked 'Hm.' on the last question. Probably both.",
+    provocation: "We've shown this result to three colleagues. None of us agree on what it means.",
+    challenge: "Show this to someone. Anyone. See if they believe it. We're still not sure we do.",
     color: "#ff2d6a",
     rarity: 4,
     shareHook:
@@ -715,10 +729,14 @@ function Fingerprint({ answers, color, size = 220, animate = false }) {
 
 function Landing({ onStart }) {
   const [visible, setVisible] = useState(false);
+  const [name, setName] = useState("");
+
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 80);
     return () => clearTimeout(t);
   }, []);
+
+  const handleSubmit = () => onStart(name);
 
   return (
     <div style={styles.landingPage}>
@@ -744,9 +762,23 @@ function Landing({ onStart }) {
             </p>
           </div>
           <div style={styles.leftBottom}>
+            <div style={styles.nameField}>
+              <label style={styles.nameLabel} className="mono">YOUR NAME</label>
+              <input
+                style={styles.nameInput}
+                type="text"
+                placeholder="Optional"
+                value={name}
+                maxLength={32}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                spellCheck={false}
+                autoComplete="off"
+              />
+            </div>
             <button
               style={styles.ctaBtn}
-              onClick={onStart}
+              onClick={handleSubmit}
               onMouseEnter={(e) => { e.currentTarget.style.background = "#fff"; e.currentTarget.style.color = "#070709"; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#fff"; }}
             >
@@ -1063,7 +1095,7 @@ function Analysis({ onDone }) {
 
 // ─── RESULT ────────────────────────────────────────────────────────────────
 
-function Result({ typeKey, answers, onShare }) {
+function Result({ typeKey, answers, userName, onShare }) {
   const type = TYPES[typeKey];
   const [stage, setStage] = useState(0);
 
@@ -1090,7 +1122,7 @@ function Result({ typeKey, answers, onShare }) {
           }}
           className="mono"
         >
-          YOUR TYPE
+          {userName ? `${userName.toUpperCase()}, YOUR TYPE IS` : "YOUR TYPE"}
         </div>
 
         {/* The big reveal */}
@@ -1184,135 +1216,154 @@ function Result({ typeKey, answers, onShare }) {
 
 // ─── SHARE ─────────────────────────────────────────────────────────────────
 
-function Share({ typeKey, answers, onRetake }) {
+function Share({ typeKey, answers, userName, publicUrl, onRetake }) {
   const type = TYPES[typeKey];
-  const [copied, setCopied] = useState(false);
+  const [urlCopied, setUrlCopied] = useState(false);
+  const [textCopied, setTextCopied] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const cardRef = useRef(null);
+  const canNativeShare = typeof navigator !== "undefined" && !!navigator.share;
 
-  const shareText = `${type.shareHook}\n\n"${type.description.slice(0, 120)}..."\n\nOnly ${type.rarity}% of people get this type. What's your English fingerprint?\n\n→ english-fingerprint.vercel.app`;
+  const siteUrl = publicUrl || "https://english-fingerprint.vercel.app";
+  const shareText = `${type.provocation}\n\nI got ${type.name} on the English Fingerprint Test.\nOnly ${type.rarity}% of people get this type.\n\n${type.challenge}\n\n→ ${siteUrl}`;
+  const tweetText = encodeURIComponent(shareText);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(shareText).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
+  const copyUrl = () => {
+    if (!publicUrl) return;
+    navigator.clipboard.writeText(publicUrl).then(() => {
+      setUrlCopied(true);
+      setTimeout(() => setUrlCopied(false), 2500);
     });
   };
 
-  const tweetText = encodeURIComponent(
-    `${type.shareHook}\n\nOnly ${type.rarity}% of people share this type.\n\nWhat's yours? → english-fingerprint.vercel.app`,
-  );
+  const copyText = () => {
+    navigator.clipboard.writeText(shareText).then(() => {
+      setTextCopied(true);
+      setTimeout(() => setTextCopied(false), 2500);
+    });
+  };
+
+  const nativeShare = async () => {
+    setSharing(true);
+    try {
+      // Capture the card as an image
+      let imageFile = null;
+      if (cardRef.current) {
+        const canvas = await html2canvas(cardRef.current, {
+          backgroundColor: "#0c0c0f",
+          scale: 2,
+          useCORS: true,
+          logging: false,
+        });
+        const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
+        imageFile = new File([blob], "english-fingerprint.png", { type: "image/png" });
+      }
+
+      const shareData = {
+        title: `I got ${type.name} on the English Fingerprint Test`,
+        text: shareText,
+        url: siteUrl,
+      };
+
+      // Share with image if browser supports it, fall back to text-only
+      if (imageFile && navigator.canShare?.({ files: [imageFile] })) {
+        await navigator.share({ ...shareData, files: [imageFile] });
+      } else {
+        await navigator.share(shareData);
+      }
+    } catch (e) {
+      // User cancelled or browser blocked — silently ignore
+    } finally {
+      setSharing(false);
+    }
+  };
 
   return (
     <div style={styles.screen}>
       <div className="noise-overlay" />
       <div style={styles.shareInner}>
-        {/* Header */}
-        <div style={styles.shareHeader} className="mono fade-in">
-          SHARE YOUR FINGERPRINT
+
+        {/* Provocation — the viral hook */}
+        <div style={styles.provocationBlock} className="slide-up">
+          <div style={styles.shareHeader} className="mono">YOUR RESULT IS PUBLIC</div>
+          <p style={{ ...styles.provocationText, color: type.color }}>
+            "{type.provocation}"
+          </p>
         </div>
 
-        {/* The card — designed to be screenshot-worthy */}
-        <div
-          ref={cardRef}
-          style={{ ...styles.shareCard, borderColor: type.color + "40" }}
-          className="slide-up"
-        >
-          {/* Card header */}
+        {/* The shareable card */}
+        <div ref={cardRef} style={{ ...styles.shareCard, borderColor: type.color + "40" }} className="slide-up">
           <div style={styles.cardTopRow} className="mono">
-            <span style={{ color: "var(--text-muted)" }}>
-              ENGLISH FINGERPRINT
-            </span>
-            <span style={{ color: type.color }}>
-              #{String(hashAnswers(answers)).padStart(6, "0")}
-            </span>
+            <span style={{ color: "var(--text-muted)" }}>ENGLISH FINGERPRINT</span>
+            <span style={{ color: type.color }}>#{String(hashAnswers(answers)).padStart(6, "0")}</span>
           </div>
-
-          {/* Fingerprint visual */}
           <div style={styles.cardFpRow}>
-            <Fingerprint answers={answers} color={type.color} size={150} />
+            <Fingerprint answers={answers} color={type.color} size={140} />
           </div>
-
-          {/* Type name on card */}
-          <div style={{ ...styles.cardTypeName, color: type.color }}>
-            {type.name}
-          </div>
-
-          {/* Tagline on card */}
-          <div style={styles.cardTagline} className="mono">
-            {type.tagline}
-          </div>
-
-          {/* Rarity */}
+          <div style={{ ...styles.cardTypeName, color: type.color }}>{type.name}</div>
+          <div style={styles.cardTagline} className="mono">{type.tagline}</div>
           <div style={styles.cardRarity} className="mono">
-            {type.rarity}% of English speakers
+            <span style={{ color: type.color, fontWeight: 700 }}>{type.rarity}%</span> of English speakers
           </div>
-
-          {/* Call to action on card */}
-          <div style={styles.cardCTA} className="mono">
-            What's your type? → english-fingerprint.vercel.app
-          </div>
+          {publicUrl && (
+            <div style={styles.cardCTA} className="mono">
+              {publicUrl.replace("https://", "")}
+            </div>
+          )}
         </div>
 
-        {/* The copy text preview */}
-        <div style={styles.textPreview} className="mono fade-in">
-          <div style={styles.textPreviewLabel}>READY TO SHARE:</div>
-          <div style={styles.textPreviewBody}>{shareText}</div>
+        {/* Public URL — the real share mechanic */}
+        {publicUrl && (
+          <div style={{ ...styles.urlBox, borderColor: type.color + "33" }} className="fade-in">
+            <div style={styles.urlLabel} className="mono">YOUR PUBLIC LINK</div>
+            <div style={styles.urlRow}>
+              <span style={styles.urlText} className="mono">{publicUrl.replace("https://", "")}</span>
+              <button
+                style={{ ...styles.urlCopyBtn, background: urlCopied ? "#00e5a0" : type.color, color: "#070709" }}
+                onClick={copyUrl}
+              >
+                {urlCopied ? "✓" : "COPY"}
+              </button>
+            </div>
+            <div style={styles.urlNote}>Anyone with this link sees your exact fingerprint.</div>
+          </div>
+        )}
+
+        {/* Challenge — comparison hook */}
+        <div style={{ ...styles.challengeBox, borderColor: type.color + "33" }} className="fade-in">
+          <div style={{ color: type.color, fontWeight: 700, fontSize: "0.62rem", letterSpacing: "0.18em" }} className="mono">
+            THE CHALLENGE
+          </div>
+          <p style={styles.challengeText}>{type.challenge}</p>
         </div>
 
-        {/* Action buttons */}
+        {/* Actions */}
         <div style={styles.actionRow} className="fade-in">
-          <button
-            style={{
-              ...styles.actionBtn,
-              background: copied ? "#00e5a0" : type.color,
-              color: "#070709",
-              flex: 2,
-            }}
-            onClick={handleCopy}
-          >
-            {copied ? "✓ COPIED!" : "COPY & SHARE"}
-          </button>
-
+          {canNativeShare ? (
+            <button
+              style={{ ...styles.actionBtn, background: sharing ? "rgba(255,255,255,0.15)" : type.color, color: sharing ? "#fff" : "#070709", flex: 2, opacity: sharing ? 0.7 : 1 }}
+              onClick={nativeShare}
+              disabled={sharing}
+            >
+              {sharing ? "CAPTURING..." : "SHARE IMAGE →"}
+            </button>
+          ) : (
+            <button
+              style={{ ...styles.actionBtn, background: textCopied ? "#00e5a0" : type.color, color: "#070709", flex: 2 }}
+              onClick={copyText}
+            >
+              {textCopied ? "✓ COPIED!" : "COPY TEXT"}
+            </button>
+          )}
           <a
             href={`https://twitter.com/intent/tweet?text=${tweetText}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              ...styles.actionBtn,
-              ...styles.actionBtnOutline,
-              borderColor: type.color,
-              color: type.color,
-              flex: 1,
-              textDecoration: "none",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+            target="_blank" rel="noopener noreferrer"
+            style={{ ...styles.actionBtn, ...styles.actionBtnOutline, borderColor: type.color, color: type.color, flex: 1, textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center" }}
           >
             𝕏 TWEET
           </a>
         </div>
 
-        {/* The insight */}
-        <div style={styles.challengeBox}>
-          <span style={{ color: type.color, fontWeight: 700 }} className="mono">
-            THE CHALLENGE
-          </span>
-          <p style={styles.challengeText}>{type.shareHook}</p>
-          <p
-            style={{
-              ...styles.challengeText,
-              marginTop: "0.5rem",
-              color: "var(--text-muted)",
-              fontSize: "0.85rem",
-            }}
-          >
-            Tag 3 friends and see if they match your type. We've never seen two
-            Anomalies who know each other.
-          </p>
-        </div>
-
-        {/* Retake */}
         <button style={styles.retakeBtn} onClick={onRetake} className="mono">
           ↩ TAKE IT AGAIN
         </button>
@@ -1320,6 +1371,115 @@ function Share({ typeKey, answers, onRetake }) {
     </div>
   );
 }
+
+// ─── SHARED VIEW ───────────────────────────────────────────────────────────
+// Shown when someone opens a ?r= link — read-only view of another person's result
+
+function SharedView({ typeKey, answers, userName, onRetake }) {
+  const type = TYPES[typeKey];
+  const [stage, setStage] = useState(0);
+
+  useEffect(() => {
+    const timers = [
+      setTimeout(() => setStage(1), 100),
+      setTimeout(() => setStage(2), 700),
+      setTimeout(() => setStage(3), 1400),
+    ];
+    return () => timers.forEach(clearTimeout);
+  }, []);
+
+  return (
+    <div style={styles.screen}>
+      <div className="noise-overlay" />
+      <div style={styles.resultInner}>
+
+        <div style={{
+          ...styles.typeLabel,
+          opacity: stage >= 1 ? 1 : 0,
+          transform: stage >= 1 ? "none" : "translateY(10px)",
+          transition: "all 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
+        }} className="mono">
+          {userName ? `${userName.toUpperCase()}'S TYPE` : "THEIR TYPE"}
+        </div>
+
+        <h1 style={{
+          ...styles.typeName,
+          color: type.color,
+          opacity: stage >= 1 ? 1 : 0,
+          letterSpacing: stage >= 1 ? "0.06em" : "0.4em",
+          transition: "all 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.1s",
+        }}>
+          {type.name}
+        </h1>
+
+        <p style={{
+          ...styles.typeTagline,
+          opacity: stage >= 2 ? 1 : 0,
+          transform: stage >= 2 ? "none" : "translateY(8px)",
+          transition: "all 0.5s ease 0.1s",
+        }} className="mono">
+          {type.tagline}
+        </p>
+
+        <div style={{
+          ...styles.fpWrap,
+          opacity: stage >= 2 ? 1 : 0,
+          transform: stage >= 2 ? "scale(1)" : "scale(0.8)",
+          transition: "all 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.2s",
+        }}>
+          <Fingerprint answers={answers} color={type.color} size={200} animate={stage >= 2} />
+        </div>
+
+        <div style={{
+          ...styles.rarityBadge,
+          borderColor: type.color + "55",
+          opacity: stage >= 3 ? 1 : 0,
+          transition: "opacity 0.5s ease",
+        }} className="mono">
+          <span style={{ color: type.color, fontWeight: 700 }}>{type.rarity}%</span>{" "}of English speakers share this type
+        </div>
+
+        <p style={{
+          ...styles.typeDesc,
+          opacity: stage >= 3 ? 1 : 0,
+          transform: stage >= 3 ? "none" : "translateY(8px)",
+          transition: "all 0.5s ease 0.1s",
+        }}>
+          {type.provocation}
+        </p>
+
+        <div style={{
+          ...styles.challengeBox,
+          borderColor: type.color + "33",
+          opacity: stage >= 3 ? 1 : 0,
+          transition: "opacity 0.5s ease 0.2s",
+          width: "100%",
+          maxWidth: "380px",
+        }}>
+          <div style={{ color: type.color, fontWeight: 700, fontSize: "0.62rem", letterSpacing: "0.18em" }} className="mono">
+            NOW FIND OUT YOUR TYPE
+          </div>
+          <p style={styles.challengeText}>
+            {type.challenge}
+          </p>
+        </div>
+
+        <button
+          style={{
+            ...styles.shareBtn,
+            background: type.color,
+            opacity: stage >= 3 ? 1 : 0,
+            transition: "opacity 0.5s ease 0.3s",
+          }}
+          onClick={onRetake}
+        >
+          TAKE THE TEST →
+        </button>
+      </div>
+    </div>
+  );
+}
+
 
 // simple hash for fingerprint ID
 function hashAnswers(answers) {
@@ -1343,18 +1503,43 @@ function pickRandom(arr, n) {
   return copy.slice(0, n);
 }
 
+function generateId() {
+  return crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
 const QUIZ_SIZE = 8;
 
 export default function App() {
-  const [phase, setPhase] = useState("landing"); // landing | question | analysis | result | share
+  const [phase, setPhase] = useState("landing"); // landing | question | analysis | result | share | shared
   const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState([]);
   const [typeKey, setTypeKey] = useState(null);
   const [activeQuestions, setActiveQuestions] = useState([]);
+  const [userName, setUserName] = useState("");
+  const [resultId, setResultId] = useState(null);
+  const [publicUrl, setPublicUrl] = useState(null);
 
-  const handleStart = useCallback(() => {
+  // On mount: check ?r= param for shared result links
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const rid = params.get("r");
+    if (!rid) return;
+    loadResult(rid).then((data) => {
+      if (!data) return;
+      setTypeKey(data.type_key);
+      setAnswers(data.answers);
+      setUserName(data.user_name || "");
+      setResultId(rid);
+      setPhase("shared");
+    });
+  }, []);
+
+  const handleStart = useCallback((name) => {
+    setUserName(name.trim());
     setAnswers([]);
     setCurrentQ(0);
+    setResultId(null);
+    setPublicUrl(null);
     setActiveQuestions(pickRandom(QUESTIONS, QUIZ_SIZE));
     setPhase("question");
   }, []);
@@ -1379,15 +1564,29 @@ export default function App() {
     setPhase("result");
   }, []);
 
-  const handleShare = useCallback(() => {
+  const handleShare = useCallback(async () => {
+    // Save to Supabase and generate a public URL
+    const id = generateId();
+    const saved = await saveResult({ id, typeKey, userName, answers });
+    if (saved) {
+      const url = `${window.location.origin}${window.location.pathname}?r=${id}`;
+      setResultId(id);
+      setPublicUrl(url);
+    }
     setPhase("share");
-  }, []);
+  }, [typeKey, userName, answers]);
 
   const handleRetake = useCallback(() => {
+    // Clear ?r= param if present
+    const url = new URL(window.location.href);
+    url.searchParams.delete("r");
+    window.history.replaceState({}, "", url);
     setPhase("landing");
     setAnswers([]);
     setCurrentQ(0);
     setTypeKey(null);
+    setResultId(null);
+    setPublicUrl(null);
   }, []);
 
   return (
@@ -1404,10 +1603,13 @@ export default function App() {
       )}
       {phase === "analysis" && <Analysis onDone={handleAnalysisDone} />}
       {phase === "result" && typeKey && (
-        <Result typeKey={typeKey} answers={answers} onShare={handleShare} />
+        <Result typeKey={typeKey} answers={answers} userName={userName} onShare={handleShare} />
       )}
       {phase === "share" && typeKey && (
-        <Share typeKey={typeKey} answers={answers} onRetake={handleRetake} />
+        <Share typeKey={typeKey} answers={answers} userName={userName} publicUrl={publicUrl} onRetake={handleRetake} />
+      )}
+      {phase === "shared" && typeKey && (
+        <SharedView typeKey={typeKey} answers={answers} userName={userName} onRetake={handleRetake} />
       )}
     </div>
   );
@@ -1491,6 +1693,29 @@ const styles = {
     fontSize: "1rem",
     color: "var(--text-dim)",
     lineHeight: 1.7,
+  },
+  nameField: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "0.4rem",
+  },
+  nameLabel: {
+    fontSize: "0.6rem",
+    letterSpacing: "0.2em",
+    color: "var(--text-muted)",
+  },
+  nameInput: {
+    background: "transparent",
+    border: "1px solid var(--border)",
+    borderRadius: "2px",
+    padding: "0.65rem 0.85rem",
+    color: "#fff",
+    fontSize: "0.9rem",
+    fontFamily: "var(--font-sans)",
+    outline: "none",
+    width: "100%",
+    transition: "border-color 0.15s ease",
+    letterSpacing: "0.01em",
   },
   ctaBtn: {
     background: "transparent",
@@ -2004,6 +2229,62 @@ const styles = {
     color: "var(--text-dim)",
     whiteSpace: "pre-line",
   },
+  provocationBlock: {
+    width: "100%",
+    display: "flex",
+    flexDirection: "column",
+    gap: "0.6rem",
+  },
+  provocationText: {
+    fontSize: "clamp(1rem, 2.5vw, 1.25rem)",
+    fontWeight: 600,
+    lineHeight: 1.4,
+    letterSpacing: "-0.01em",
+  },
+  urlBox: {
+    width: "100%",
+    border: "1px solid",
+    borderRadius: "4px",
+    padding: "0.9rem 1rem",
+    display: "flex",
+    flexDirection: "column",
+    gap: "0.5rem",
+    background: "rgba(255,255,255,0.02)",
+  },
+  urlLabel: {
+    fontSize: "0.58rem",
+    letterSpacing: "0.18em",
+    color: "var(--text-muted)",
+  },
+  urlRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "0.6rem",
+  },
+  urlText: {
+    fontSize: "0.75rem",
+    color: "var(--text-dim)",
+    flex: 1,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  urlCopyBtn: {
+    border: "none",
+    borderRadius: "2px",
+    padding: "0.35rem 0.75rem",
+    fontSize: "0.65rem",
+    letterSpacing: "0.12em",
+    fontFamily: "var(--font-mono)",
+    fontWeight: 700,
+    cursor: "pointer",
+    flexShrink: 0,
+  },
+  urlNote: {
+    fontSize: "0.65rem",
+    color: "var(--text-muted)",
+    fontStyle: "italic",
+  },
   actionRow: {
     width: "100%",
     display: "flex",
@@ -2028,7 +2309,7 @@ const styles = {
   challengeBox: {
     width: "100%",
     background: "var(--bg2)",
-    border: "1px solid var(--border)",
+    border: "1px solid",
     borderRadius: "4px",
     padding: "1.1rem",
     display: "flex",
