@@ -729,13 +729,21 @@ function Fingerprint({ answers, color, size = 220, animate = false }) {
 function Landing({ onStart }) {
   const [visible, setVisible] = useState(false);
   const [name, setName] = useState("");
+  const [nameError, setNameError] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 80);
     return () => clearTimeout(t);
   }, []);
 
-  const handleSubmit = () => onStart(name);
+  const handleSubmit = () => {
+    if (!name.trim()) {
+      setNameError(true);
+      setTimeout(() => setNameError(false), 2000);
+      return;
+    }
+    onStart(name.trim());
+  };
 
   return (
     <div style={styles.landingPage}>
@@ -762,14 +770,16 @@ function Landing({ onStart }) {
           </div>
           <div style={styles.leftBottom}>
             <div style={styles.nameField}>
-              <label style={styles.nameLabel} className="mono">YOUR NAME</label>
+              <label style={{ ...styles.nameLabel, color: nameError ? "#ff4d4d" : undefined }} className="mono">
+                {nameError ? "NAME IS REQUIRED" : "YOUR NAME"}
+              </label>
               <input
-                style={styles.nameInput}
+                style={{ ...styles.nameInput, borderColor: nameError ? "#ff4d4d" : undefined }}
                 type="text"
-                placeholder="Optional"
+                placeholder="Enter your name"
                 value={name}
                 maxLength={32}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => { setName(e.target.value); if (nameError) setNameError(false); }}
                 onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
                 spellCheck={false}
                 autoComplete="off"
@@ -1137,6 +1147,24 @@ function Result({ typeKey, answers, userName, onShare }) {
           {type.name}
         </h1>
 
+        {/* Name */}
+        {userName && (
+          <div
+            style={{
+              fontSize: "0.7rem",
+              letterSpacing: "0.22em",
+              color: "var(--text-muted)",
+              fontWeight: 600,
+              marginTop: "-0.4rem",
+              opacity: stage >= 1 ? 1 : 0,
+              transition: "opacity 0.6s ease 0.2s",
+            }}
+            className="mono"
+          >
+            {userName.toUpperCase()}
+          </div>
+        )}
+
         {/* Tagline */}
         <p
           style={{
@@ -1248,9 +1276,20 @@ function Share({ typeKey, answers, userName, publicUrl, onRetake }) {
         <div style={{ ...styles.urlBox, borderColor: type.color + "44", width: "100%" }} className="slide-up">
           <div style={styles.urlLabel} className="mono">YOUR PUBLIC LINK</div>
           <div style={styles.urlRow}>
-            <span style={{ ...styles.urlText, fontSize: "0.82rem" }} className="mono">
+            <span style={{ ...styles.urlText, fontSize: "0.82rem", flex: 1 }} className="mono">
               {siteUrl.replace("https://", "")}
             </span>
+            <button
+              style={{ ...styles.urlCopyBtn, background: copied ? "#00e5a0" : type.color, color: "#070709", marginLeft: "0.6rem", flexShrink: 0 }}
+              onClick={() => {
+                navigator.clipboard.writeText(siteUrl).then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2500);
+                });
+              }}
+            >
+              {copied ? "✓" : "COPY"}
+            </button>
           </div>
           <div style={styles.urlNote}>Anyone with this link sees your exact result page.</div>
         </div>
