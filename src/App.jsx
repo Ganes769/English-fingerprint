@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import "./index.css";
 import { saveResult, loadResult } from "./lib/supabase.js";
-import html2canvas from "html2canvas";
 
 // ─── QUESTIONS ─────────────────────────────────────────────────────────────
 
@@ -1216,161 +1215,11 @@ function Result({ typeKey, answers, userName, onShare }) {
 
 // ─── SHARE ─────────────────────────────────────────────────────────────────
 
-// ─── SHARE IMAGE ───────────────────────────────────────────────────────────
-// Off-screen portrait card (600×900) captured by html2canvas and shared as PNG
-
-function ShareImage({ typeKey, answers, userName, publicUrl, innerRef }) {
-  const type = TYPES[typeKey];
-  const url = (publicUrl || "english-fingerprint.vercel.app").replace("https://", "");
-  const displayName = userName ? userName.toUpperCase() : null;
-
-  return (
-    <div
-      ref={innerRef}
-      style={{
-        position: "fixed",
-        left: "-9999px",
-        top: "-9999px",
-        width: "600px",
-        height: "900px",
-        background: "#0c0c0f",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "56px 52px 48px",
-        fontFamily: "'Inter', 'SF Pro Display', 'Helvetica Neue', sans-serif",
-        boxSizing: "border-box",
-        overflow: "hidden",
-      }}
-    >
-      {/* Subtle glow behind fingerprint */}
-      <div style={{
-        position: "absolute",
-        width: "480px",
-        height: "480px",
-        borderRadius: "50%",
-        background: `radial-gradient(circle, ${type.color}18 0%, transparent 65%)`,
-        top: "50%",
-        left: "50%",
-        transform: "translate(-50%, -55%)",
-        pointerEvents: "none",
-      }} />
-
-      {/* Top row */}
-      <div style={{
-        width: "100%",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        position: "relative",
-        zIndex: 1,
-      }}>
-        <span style={{ fontSize: "13px", letterSpacing: "0.2em", color: "rgba(255,255,255,0.3)", fontFamily: "monospace" }}>
-          ENGLISH FINGERPRINT
-        </span>
-        <span style={{ fontSize: "13px", letterSpacing: "0.12em", color: type.color, fontFamily: "monospace" }}>
-          #{String(hashAnswers(answers)).padStart(6, "0")}
-        </span>
-      </div>
-
-      {/* Center — fingerprint + type */}
-      <div style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: "28px",
-        position: "relative",
-        zIndex: 1,
-        flex: 1,
-        justifyContent: "center",
-      }}>
-        <Fingerprint answers={answers} color={type.color} size={240} />
-
-        <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: "10px" }}>
-          {displayName && (
-            <div style={{ fontSize: "14px", letterSpacing: "0.22em", color: "rgba(255,255,255,0.35)", fontFamily: "monospace" }}>
-              {displayName}
-            </div>
-          )}
-          <h1 style={{
-            fontSize: "46px",
-            fontWeight: 700,
-            color: type.color,
-            letterSpacing: "0.06em",
-            lineHeight: 1,
-            margin: 0,
-          }}>
-            {type.name}
-          </h1>
-          <p style={{
-            fontSize: "16px",
-            letterSpacing: "0.14em",
-            color: "rgba(255,255,255,0.45)",
-            margin: 0,
-            fontFamily: "monospace",
-          }}>
-            {type.tagline}
-          </p>
-        </div>
-
-        {/* Rarity pill */}
-        <div style={{
-          border: `1px solid ${type.color}44`,
-          padding: "8px 22px",
-          fontSize: "13px",
-          letterSpacing: "0.12em",
-          color: "rgba(255,255,255,0.4)",
-          fontFamily: "monospace",
-        }}>
-          <span style={{ color: type.color, fontWeight: 700 }}>{type.rarity}%</span>
-          {" "}of English speakers
-        </div>
-
-        {/* Provocation */}
-        <p style={{
-          fontSize: "18px",
-          fontWeight: 600,
-          color: "rgba(255,255,255,0.75)",
-          textAlign: "center",
-          lineHeight: 1.5,
-          maxWidth: "440px",
-          margin: 0,
-          letterSpacing: "-0.01em",
-        }}>
-          "{type.provocation}"
-        </p>
-      </div>
-
-      {/* Bottom — URL */}
-      <div style={{
-        width: "100%",
-        borderTop: "1px solid rgba(255,255,255,0.08)",
-        paddingTop: "20px",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        position: "relative",
-        zIndex: 1,
-      }}>
-        <span style={{ fontSize: "13px", letterSpacing: "0.1em", color: "rgba(255,255,255,0.2)", fontFamily: "monospace" }}>
-          {url}
-        </span>
-        <span style={{ fontSize: "13px", letterSpacing: "0.1em", color: "rgba(255,255,255,0.2)", fontFamily: "monospace" }}>
-          WHAT'S YOUR TYPE?
-        </span>
-      </div>
-    </div>
-  );
-}
-
 // ─── SHARE ─────────────────────────────────────────────────────────────────
 
 function Share({ typeKey, answers, userName, publicUrl, onRetake }) {
   const type = TYPES[typeKey];
-  const [urlCopied, setUrlCopied] = useState(false);
-  const [savingImg, setSavingImg] = useState(false);
-  const shareImageRef = useRef(null);
+  const [copied, setCopied] = useState(false);
   const canNativeShare = typeof navigator !== "undefined" && !!navigator.share;
 
   const siteUrl = publicUrl || "https://english-fingerprint.vercel.app";
@@ -1378,66 +1227,23 @@ function Share({ typeKey, answers, userName, publicUrl, onRetake }) {
   const shareText = `${type.provocation}\n\nOnly ${type.rarity}% of people get this type.\n\n${type.challenge}`;
   const tweetText = encodeURIComponent(`${shareText}\n\n→ ${siteUrl}`);
 
-  // Share the webpage link — shows a live link preview in iMessage, WhatsApp, etc.
   const shareLink = () => {
     if (canNativeShare) {
       navigator.share({ title: shareTitle, text: shareText, url: siteUrl }).catch(() => {});
     } else {
       navigator.clipboard.writeText(siteUrl).then(() => {
-        setUrlCopied(true);
-        setTimeout(() => setUrlCopied(false), 2500);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2500);
       });
-    }
-  };
-
-  // Save / share the result image to camera roll
-  const saveImage = async () => {
-    setSavingImg(true);
-    try {
-      const canvas = await html2canvas(shareImageRef.current, {
-        backgroundColor: "#0c0c0f",
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        width: 600,
-        height: 900,
-      });
-      const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
-      const file = new File([blob], "english-fingerprint.png", { type: "image/png" });
-
-      if (navigator.canShare?.({ files: [file] })) {
-        // Mobile: share the image file so it goes to camera roll / stories
-        await navigator.share({ files: [file] });
-      } else {
-        // Desktop: trigger download
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = "english-fingerprint.png";
-        a.click();
-        URL.revokeObjectURL(a.href);
-      }
-    } catch (e) {
-      // cancelled or unsupported
-    } finally {
-      setSavingImg(false);
     }
   };
 
   return (
     <div style={styles.screen}>
       <div className="noise-overlay" />
-
-      {/* Off-screen share image — captured by html2canvas */}
-      <ShareImage
-        typeKey={typeKey}
-        answers={answers}
-        userName={userName}
-        publicUrl={publicUrl}
-        innerRef={shareImageRef}
-      />
       <div style={styles.shareInner}>
 
-        {/* Provocation — the viral hook */}
+        {/* Provocation */}
         <div style={styles.provocationBlock} className="slide-up">
           <div style={styles.shareHeader} className="mono">YOUR RESULT IS PUBLIC</div>
           <p style={{ ...styles.provocationText, color: type.color }}>
@@ -1445,7 +1251,7 @@ function Share({ typeKey, answers, userName, publicUrl, onRetake }) {
           </p>
         </div>
 
-        {/* The shareable card — preview of what gets shared */}
+        {/* Card */}
         <div style={{ ...styles.shareCard, borderColor: type.color + "40" }} className="slide-up">
           <div style={styles.cardTopRow} className="mono">
             <span style={{ color: "var(--text-muted)" }}>ENGLISH FINGERPRINT</span>
@@ -1466,24 +1272,24 @@ function Share({ typeKey, answers, userName, publicUrl, onRetake }) {
           )}
         </div>
 
-        {/* Public URL — the real share mechanic */}
+        {/* Public link */}
         {publicUrl && (
           <div style={{ ...styles.urlBox, borderColor: type.color + "33" }} className="fade-in">
             <div style={styles.urlLabel} className="mono">YOUR PUBLIC LINK</div>
             <div style={styles.urlRow}>
               <span style={styles.urlText} className="mono">{publicUrl.replace("https://", "")}</span>
               <button
-                style={{ ...styles.urlCopyBtn, background: urlCopied ? "#00e5a0" : type.color, color: "#070709" }}
+                style={{ ...styles.urlCopyBtn, background: copied ? "#00e5a0" : type.color, color: "#070709" }}
                 onClick={shareLink}
               >
-                {urlCopied ? "✓" : canNativeShare ? "SHARE" : "COPY"}
+                {copied ? "✓" : canNativeShare ? "SHARE" : "COPY"}
               </button>
             </div>
-            <div style={styles.urlNote}>Anyone with this link sees your exact fingerprint.</div>
+            <div style={styles.urlNote}>Anyone with this link sees your exact result.</div>
           </div>
         )}
 
-        {/* Challenge — comparison hook */}
+        {/* Challenge */}
         <div style={{ ...styles.challengeBox, borderColor: type.color + "33" }} className="fade-in">
           <div style={{ color: type.color, fontWeight: 700, fontSize: "0.62rem", letterSpacing: "0.18em" }} className="mono">
             THE CHALLENGE
@@ -1494,24 +1300,17 @@ function Share({ typeKey, answers, userName, publicUrl, onRetake }) {
         {/* Actions */}
         <div style={styles.actionRow} className="fade-in">
           <button
-            style={{ ...styles.actionBtn, background: urlCopied ? "#00e5a0" : type.color, color: "#070709", flex: 2 }}
+            style={{ ...styles.actionBtn, background: copied ? "#00e5a0" : type.color, color: "#070709", flex: 2 }}
             onClick={shareLink}
           >
-            {urlCopied ? "✓ LINK COPIED!" : canNativeShare ? "SHARE LINK →" : "COPY LINK"}
-          </button>
-          <button
-            style={{ ...styles.actionBtn, ...styles.actionBtnOutline, borderColor: type.color, color: type.color, flex: 1, opacity: savingImg ? 0.6 : 1 }}
-            onClick={saveImage}
-            disabled={savingImg}
-          >
-            {savingImg ? "..." : "SAVE IMG"}
+            {copied ? "✓ COPIED!" : canNativeShare ? "SHARE RESULT →" : "COPY LINK"}
           </button>
           <a
             href={`https://twitter.com/intent/tweet?text=${tweetText}`}
             target="_blank" rel="noopener noreferrer"
             style={{ ...styles.actionBtn, ...styles.actionBtnOutline, borderColor: type.color, color: type.color, flex: 1, textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center" }}
           >
-            𝕏
+            𝕏 TWEET
           </a>
         </div>
 
@@ -1675,13 +1474,18 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const rid = params.get("r");
     if (!rid) return;
+    // Show loading state while fetching
+    setPhase("shared");
     loadResult(rid).then((data) => {
-      if (!data) return;
+      if (!data) {
+        // Result not found — go back to landing
+        setPhase("landing");
+        return;
+      }
       setTypeKey(data.type_key);
       setAnswers(data.answers);
       setUserName(data.user_name || "");
       setResultId(rid);
-      setPhase("shared");
     });
   }, []);
 
@@ -1759,8 +1563,14 @@ export default function App() {
       {phase === "share" && typeKey && (
         <Share typeKey={typeKey} answers={answers} userName={userName} publicUrl={publicUrl} onRetake={handleRetake} />
       )}
-      {phase === "shared" && typeKey && (
-        <SharedView typeKey={typeKey} answers={answers} userName={userName} onRetake={handleRetake} />
+      {phase === "shared" && (
+        typeKey
+          ? <SharedView typeKey={typeKey} answers={answers} userName={userName} onRetake={handleRetake} />
+          : <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)" }}>
+              <div style={{ fontSize: "0.75rem", letterSpacing: "0.2em", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }} className="mono">
+                LOADING RESULT...
+              </div>
+            </div>
       )}
     </div>
   );
