@@ -1369,64 +1369,57 @@ function ShareImage({ typeKey, answers, userName, publicUrl, innerRef }) {
 function Share({ typeKey, answers, userName, publicUrl, onRetake }) {
   const type = TYPES[typeKey];
   const [urlCopied, setUrlCopied] = useState(false);
-  const [textCopied, setTextCopied] = useState(false);
-  const [sharing, setSharing] = useState(false);
-  const cardRef = useRef(null);
+  const [savingImg, setSavingImg] = useState(false);
   const shareImageRef = useRef(null);
   const canNativeShare = typeof navigator !== "undefined" && !!navigator.share;
 
   const siteUrl = publicUrl || "https://english-fingerprint.vercel.app";
-  const shareText = `${type.provocation}\n\nI got ${type.name} on the English Fingerprint Test.\nOnly ${type.rarity}% of people get this type.\n\n${type.challenge}\n\n→ ${siteUrl}`;
-  const tweetText = encodeURIComponent(shareText);
+  const shareTitle = `I got ${type.name} on the English Fingerprint Test`;
+  const shareText = `${type.provocation}\n\nOnly ${type.rarity}% of people get this type.\n\n${type.challenge}`;
+  const tweetText = encodeURIComponent(`${shareText}\n\n→ ${siteUrl}`);
 
-  const copyUrl = () => {
-    if (!publicUrl) return;
-    navigator.clipboard.writeText(publicUrl).then(() => {
-      setUrlCopied(true);
-      setTimeout(() => setUrlCopied(false), 2500);
-    });
+  // Share the webpage link — shows a live link preview in iMessage, WhatsApp, etc.
+  const shareLink = () => {
+    if (canNativeShare) {
+      navigator.share({ title: shareTitle, text: shareText, url: siteUrl }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(siteUrl).then(() => {
+        setUrlCopied(true);
+        setTimeout(() => setUrlCopied(false), 2500);
+      });
+    }
   };
 
-  const copyText = () => {
-    navigator.clipboard.writeText(shareText).then(() => {
-      setTextCopied(true);
-      setTimeout(() => setTextCopied(false), 2500);
-    });
-  };
-
-  const nativeShare = async () => {
-    setSharing(true);
+  // Save / share the result image to camera roll
+  const saveImage = async () => {
+    setSavingImg(true);
     try {
-      // Capture the full off-screen share image (600×900 portrait)
-      let imageFile = null;
-      if (shareImageRef.current) {
-        const canvas = await html2canvas(shareImageRef.current, {
-          backgroundColor: "#0c0c0f",
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          width: 600,
-          height: 900,
-        });
-        const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
-        imageFile = new File([blob], "english-fingerprint.png", { type: "image/png" });
-      }
+      const canvas = await html2canvas(shareImageRef.current, {
+        backgroundColor: "#0c0c0f",
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        width: 600,
+        height: 900,
+      });
+      const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
+      const file = new File([blob], "english-fingerprint.png", { type: "image/png" });
 
-      const shareData = {
-        title: `I got ${type.name} on the English Fingerprint Test`,
-        text: `${type.provocation}\n\nOnly ${type.rarity}% of people get this type.\n\n→ ${siteUrl}`,
-        url: siteUrl,
-      };
-
-      if (imageFile && navigator.canShare?.({ files: [imageFile] })) {
-        await navigator.share({ ...shareData, files: [imageFile] });
+      if (navigator.canShare?.({ files: [file] })) {
+        // Mobile: share the image file so it goes to camera roll / stories
+        await navigator.share({ files: [file] });
       } else {
-        await navigator.share(shareData);
+        // Desktop: trigger download
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "english-fingerprint.png";
+        a.click();
+        URL.revokeObjectURL(a.href);
       }
     } catch (e) {
-      // User cancelled or unsupported — silently ignore
+      // cancelled or unsupported
     } finally {
-      setSharing(false);
+      setSavingImg(false);
     }
   };
 
@@ -1481,9 +1474,9 @@ function Share({ typeKey, answers, userName, publicUrl, onRetake }) {
               <span style={styles.urlText} className="mono">{publicUrl.replace("https://", "")}</span>
               <button
                 style={{ ...styles.urlCopyBtn, background: urlCopied ? "#00e5a0" : type.color, color: "#070709" }}
-                onClick={copyUrl}
+                onClick={shareLink}
               >
-                {urlCopied ? "✓" : "COPY"}
+                {urlCopied ? "✓" : canNativeShare ? "SHARE" : "COPY"}
               </button>
             </div>
             <div style={styles.urlNote}>Anyone with this link sees your exact fingerprint.</div>
@@ -1500,28 +1493,25 @@ function Share({ typeKey, answers, userName, publicUrl, onRetake }) {
 
         {/* Actions */}
         <div style={styles.actionRow} className="fade-in">
-          {canNativeShare ? (
-            <button
-              style={{ ...styles.actionBtn, background: sharing ? "rgba(255,255,255,0.15)" : type.color, color: sharing ? "#fff" : "#070709", flex: 2, opacity: sharing ? 0.7 : 1 }}
-              onClick={nativeShare}
-              disabled={sharing}
-            >
-              {sharing ? "CAPTURING..." : "SHARE IMAGE →"}
-            </button>
-          ) : (
-            <button
-              style={{ ...styles.actionBtn, background: textCopied ? "#00e5a0" : type.color, color: "#070709", flex: 2 }}
-              onClick={copyText}
-            >
-              {textCopied ? "✓ COPIED!" : "COPY TEXT"}
-            </button>
-          )}
+          <button
+            style={{ ...styles.actionBtn, background: urlCopied ? "#00e5a0" : type.color, color: "#070709", flex: 2 }}
+            onClick={shareLink}
+          >
+            {urlCopied ? "✓ LINK COPIED!" : canNativeShare ? "SHARE LINK →" : "COPY LINK"}
+          </button>
+          <button
+            style={{ ...styles.actionBtn, ...styles.actionBtnOutline, borderColor: type.color, color: type.color, flex: 1, opacity: savingImg ? 0.6 : 1 }}
+            onClick={saveImage}
+            disabled={savingImg}
+          >
+            {savingImg ? "..." : "SAVE IMG"}
+          </button>
           <a
             href={`https://twitter.com/intent/tweet?text=${tweetText}`}
             target="_blank" rel="noopener noreferrer"
             style={{ ...styles.actionBtn, ...styles.actionBtnOutline, borderColor: type.color, color: type.color, flex: 1, textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center" }}
           >
-            𝕏 TWEET
+            𝕏
           </a>
         </div>
 
