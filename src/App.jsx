@@ -1224,8 +1224,7 @@ function Share({ typeKey, answers, userName, publicUrl, onRetake }) {
 
   const siteUrl = publicUrl || "https://english-fingerprint.vercel.app";
   const shareTitle = `I got ${type.name} on the English Fingerprint Test`;
-  const shareText = `${type.provocation}\n\nOnly ${type.rarity}% of people get this type.\n\n${type.challenge}`;
-  const tweetText = encodeURIComponent(`${shareText}\n\n→ ${siteUrl}`);
+  const shareText = `${type.provocation}\n\nOnly ${type.rarity}% of people get this type.\n\n→ ${siteUrl}`;
 
   const shareLink = () => {
     if (canNativeShare) {
@@ -1241,72 +1240,31 @@ function Share({ typeKey, answers, userName, publicUrl, onRetake }) {
   return (
     <div style={styles.screen}>
       <div className="noise-overlay" />
-      <div style={styles.shareInner}>
+      <div style={{ ...styles.shareInner, gap: "1.5rem" }}>
 
-        {/* Provocation */}
-        <div style={styles.provocationBlock} className="slide-up">
-          <div style={styles.shareHeader} className="mono">YOUR RESULT IS PUBLIC</div>
-          <p style={{ ...styles.provocationText, color: type.color }}>
-            "{type.provocation}"
-          </p>
+        <div style={styles.shareHeader} className="mono">SHARE YOUR RESULT</div>
+
+        {/* Link box */}
+        <div style={{ ...styles.urlBox, borderColor: type.color + "44", width: "100%" }} className="slide-up">
+          <div style={styles.urlLabel} className="mono">YOUR PUBLIC LINK</div>
+          <div style={styles.urlRow}>
+            <span style={{ ...styles.urlText, fontSize: "0.82rem" }} className="mono">
+              {siteUrl.replace("https://", "")}
+            </span>
+          </div>
+          <div style={styles.urlNote}>Anyone with this link sees your exact result page.</div>
         </div>
 
-        {/* Card */}
-        <div style={{ ...styles.shareCard, borderColor: type.color + "40" }} className="slide-up">
-          <div style={styles.cardTopRow} className="mono">
-            <span style={{ color: "var(--text-muted)" }}>ENGLISH FINGERPRINT</span>
-            <span style={{ color: type.color }}>#{String(hashAnswers(answers)).padStart(6, "0")}</span>
-          </div>
-          <div style={styles.cardFpRow}>
-            <Fingerprint answers={answers} color={type.color} size={140} />
-          </div>
-          <div style={{ ...styles.cardTypeName, color: type.color }}>{type.name}</div>
-          <div style={styles.cardTagline} className="mono">{type.tagline}</div>
-          <div style={styles.cardRarity} className="mono">
-            <span style={{ color: type.color, fontWeight: 700 }}>{type.rarity}%</span> of English speakers
-          </div>
-          {publicUrl && (
-            <div style={styles.cardCTA} className="mono">
-              {publicUrl.replace("https://", "")}
-            </div>
-          )}
-        </div>
-
-        {/* Public link */}
-        {publicUrl && (
-          <div style={{ ...styles.urlBox, borderColor: type.color + "33" }} className="fade-in">
-            <div style={styles.urlLabel} className="mono">YOUR PUBLIC LINK</div>
-            <div style={styles.urlRow}>
-              <span style={styles.urlText} className="mono">{publicUrl.replace("https://", "")}</span>
-              <button
-                style={{ ...styles.urlCopyBtn, background: copied ? "#00e5a0" : type.color, color: "#070709" }}
-                onClick={shareLink}
-              >
-                {copied ? "✓" : canNativeShare ? "SHARE" : "COPY"}
-              </button>
-            </div>
-            <div style={styles.urlNote}>Anyone with this link sees your exact result.</div>
-          </div>
-        )}
-
-        {/* Challenge */}
-        <div style={{ ...styles.challengeBox, borderColor: type.color + "33" }} className="fade-in">
-          <div style={{ color: type.color, fontWeight: 700, fontSize: "0.62rem", letterSpacing: "0.18em" }} className="mono">
-            THE CHALLENGE
-          </div>
-          <p style={styles.challengeText}>{type.challenge}</p>
-        </div>
-
-        {/* Actions */}
-        <div style={styles.actionRow} className="fade-in">
+        {/* Share + tweet */}
+        <div style={{ ...styles.actionRow, width: "100%" }} className="fade-in">
           <button
             style={{ ...styles.actionBtn, background: copied ? "#00e5a0" : type.color, color: "#070709", flex: 2 }}
             onClick={shareLink}
           >
-            {copied ? "✓ COPIED!" : canNativeShare ? "SHARE RESULT →" : "COPY LINK"}
+            {copied ? "✓ COPIED!" : canNativeShare ? "SHARE LINK →" : "COPY LINK"}
           </button>
           <a
-            href={`https://twitter.com/intent/tweet?text=${tweetText}`}
+            href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}`}
             target="_blank" rel="noopener noreferrer"
             style={{ ...styles.actionBtn, ...styles.actionBtnOutline, borderColor: type.color, color: type.color, flex: 1, textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center" }}
           >
